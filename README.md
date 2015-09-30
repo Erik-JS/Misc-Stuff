@@ -13,4 +13,4 @@ Link test: [first link][link1], [second link][link2]
 
 
 [link1]: <http://www.google.com>
-[link2]: <htttp://github.com>
+[link2]: <http://github.com>
