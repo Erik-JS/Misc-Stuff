@@ -93,7 +93,7 @@ class ProfileTool
 			ds.Write(x, 0, x.Length);
 			ds.Close();
 			ms.Write(compData.ToArray(), 0, compData.ToArray().Length);
-			// Adler32 chacksum as big endian - also not supported by DeflateStream, but required by zlib standard
+			// Adler32 checksum as big endian - also not supported by DeflateStream, but required by zlib standard
 			int checksum = GetAdler32(x);
 			ms.WriteByte((byte)((checksum>>24) & 0xFF));
 			ms.WriteByte((byte)((checksum>>16) & 0xFF));
