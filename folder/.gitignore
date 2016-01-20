@@ -1,4 +1,6 @@
 # ignore everything in this folder
 *
 # except .gitignore and folder1-2
+!folder1/
+!folder2/
 !.gitignore
