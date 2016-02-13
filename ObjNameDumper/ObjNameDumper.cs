@@ -65,9 +65,8 @@ class ObjNameDumper
 			uint CurrentGObject = ReadUInt32(GObjectsPointer + (uint)i);
 			if (CurrentGObject == 0)
 				continue;
-			uint Pos2C = ReadUInt32(CurrentGObject + 0x2C);
-			string gobjString = ReadString(Pos2C + 8);
-			lstLines.Add(String.Format("{0:D8} {0:X8} : {1:X8} : {2}", i / 4, CurrentGObject, gobjString));
+			string objFullName = GetObjectFullName(CurrentGObject);
+			lstLines.Add(String.Format("{0:D8} {0:X8} : {1:X8} : {2}", i / 4, CurrentGObject, objFullName));
 			Console.Write("\r{0}", ++count);
 		}
 		Console.Write("\n");
@@ -120,6 +119,46 @@ class ObjNameDumper
 			charList.Add(c);
 		} while (true);
 		return new string(charList.ToArray());
+	}
+	
+	static string GetObjectName(uint CurrentObject)
+	{
+		if (CurrentObject == 0)
+			return "";
+		uint Pos2C = ReadUInt32(CurrentObject + 0x2C);
+		return ReadString(Pos2C + 8);
+	}
+	
+	static string GetObjectFullName(uint CurrentObject)
+	{
+		string fullname = "(null)";
+		uint objOuter = GetObjectOuter(CurrentObject);
+		uint objClass = GetObjectClass(CurrentObject);
+		if(objOuter != 0 && objClass != 0)
+		{
+			fullname = GetObjectName(objClass) + " ";
+			uint objOuterOuter = GetObjectOuter(objOuter);
+			if (objOuterOuter != 0)
+				fullname += GetObjectName(objOuterOuter) + ".";
+			fullname += GetObjectName(objOuter) + ".";
+			fullname += GetObjectName(CurrentObject);
+		}
+		if (objOuter == 0 && objClass != 0)
+		{
+			fullname = GetObjectName(objClass) + " ";
+			fullname += GetObjectName(CurrentObject) + " (no Outer)";
+		}
+		return fullname;
+	}
+	
+	static uint GetObjectOuter(uint CurrentObject)
+	{
+		return ReadUInt32(CurrentObject + 0x28);
+	}
+	
+	static uint GetObjectClass(uint CurrentObject)
+	{
+		return ReadUInt32(CurrentObject + 0x34);
 	}
 
 }
