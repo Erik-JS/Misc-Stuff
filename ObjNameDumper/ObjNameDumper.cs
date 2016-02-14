@@ -37,8 +37,6 @@ class ObjNameDumper
 	
 	const uint GObjects = 0x01AB5634;
 	
-	const int PointerListSize = 0x72000;
-	
 	static void Main(string[] args)
 	{
 		Console.WriteLine("ObjNameDumper by Erik JS\n");
@@ -55,22 +53,73 @@ class ObjNameDumper
 			ShowExitMessage("Cannot access MassEffect3.exe.");
 			return;
 		}
+		if (args.Length != 0)
+		{
+			
+			if (args[0].StartsWith("0x", StringComparison.Ordinal))
+			{
+				Console.WriteLine("Reading single object...\n");
+				uint targetObject = Convert.ToUInt32(args[0], 16);
+				Console.WriteLine(String.Format("{0:X8} : {1}", targetObject, GetObjectFullName(targetObject)));
+			}
+			else
+				LogAllObjectFullNamesToFile(args[0]);
+			
+		}
+		if (args.Length == 0)
+			LogAllObjectFullNamesToFile();
+		
+		CloseHandle(hGame);
+	}
+	
+	static void LogAllObjectFullNamesToFile(string filter = "")
+	{
+		bool useFilter = !String.IsNullOrEmpty(filter);
 		Console.WriteLine ("Reading contents from game's memory...");
-		uint GObjectsPointer = ReadUInt32(GObjects);
-		Console.WriteLine(String.Format("Current list of GObjects: 0x{0:X8}", GObjectsPointer));
+		if (useFilter)
+		{
+			Console.Write("Using filter: \"");
+			Console.ForegroundColor = ConsoleColor.Cyan;
+			Console.Write(filter);
+			Console.ResetColor();
+			Console.WriteLine("\"");
+		}
+		uint GObjectsList = ReadUInt32(GObjects);
+		int GObjectsNum =  ReadInt32(GObjects + 4);
+		Console.WriteLine(String.Format("Current list of GObjects: 0x{0:X8}", GObjectsList));
+		Console.WriteLine("GObjects->Num: " + GObjectsNum);
 		List<string> lstLines = new List<string>();
 		int count = 0;
-		for (int i = 0; i < PointerListSize; i += 4)
+		int rcount = 0;
+		int fcount = 0;
+		while (count < GObjectsNum)
 		{
-			uint CurrentGObject = ReadUInt32(GObjectsPointer + (uint)i);
+			uint CurrentGObject = ReadUInt32(GObjectsList + ((uint)count * 4));
 			if (CurrentGObject == 0)
+			{
+				count++;
+				ShowProgressLine(GObjectsNum, count, rcount, fcount, useFilter);
 				continue;
+			}
+			
 			string objFullName = GetObjectFullName(CurrentGObject);
-			lstLines.Add(String.Format("{0:D8} {0:X8} : {1:X8} : {2}", i / 4, CurrentGObject, objFullName));
-			Console.Write("\r{0}", ++count);
+			
+			if (useFilter && objFullName.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0)
+			{
+				lstLines.Add(String.Format("{0:D8} {0:X8} : {1:X8} : {2}", count, CurrentGObject, objFullName));
+				fcount++;
+			}
+			else if (!useFilter)
+				lstLines.Add(String.Format("{0:D8} {0:X8} : {1:X8} : {2}", count, CurrentGObject, objFullName));
+			
+			rcount++;
+			count++;
+
+			ShowProgressLine(GObjectsNum, count, rcount, fcount, useFilter);
 		}
+		// int numberofnullslots = count - rcount;
+		
 		Console.Write("\n");
-		CloseHandle(hGame);
 		Console.WriteLine ("Writing to file...");
 		try
 		{
@@ -81,6 +130,18 @@ class ObjNameDumper
 		{
 			ShowExitMessage(ex.GetType().Name + ": " + ex.Message);
 		}
+	}
+	
+	static void ShowProgressLine(int num, int count, int rcount, int fcount, bool useFilter)
+	{
+		Console.ForegroundColor = ConsoleColor.White;
+		Console.Write(String.Format("\r{0}{1}", ((float)count/num).ToString("0%").PadRight(10), rcount.ToString().PadRight(10)));
+		if (useFilter)
+		{
+			Console.ForegroundColor = ConsoleColor.Cyan;
+			Console.Write(fcount);
+		}
+		Console.ResetColor();
 	}
 	
 	static void ShowExitMessage(string message)
