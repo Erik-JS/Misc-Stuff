@@ -3,6 +3,8 @@ using System.IO; // File
 using System.Diagnostics; // Process
 using System.Runtime.InteropServices; // DllImport
 using System.Collections.Generic; // List<T>
+using System.Threading; // Thread
+using System.Linq; // Where
 
 class ObjNameDumper
 {
@@ -37,9 +39,28 @@ class ObjNameDumper
 	
 	const uint GObjects = 0x01AB5634;
 	
+	static int GObjectsNum;
+	
+	static string[] arrayLines;
+	
+	static int count;
+	static int rcount;
+	static int fcount;
+	static string filter;
+	static bool appendNameID;
+	
+	static Object thisLock = new Object();
+	static Object thisLockR = new Object();
+	static Object thisLockF = new Object();
+	
 	static void Main(string[] args)
 	{
 		Console.WriteLine("ObjNameDumper by Erik JS\n");
+		if (args.Length > 2)
+		{
+			ShowExitMessage("Unsupported number of parameters. No operation.");
+			return;
+		}
 		Console.WriteLine("Verifying MassEffect3.exe...");
 		Process[] p = Process.GetProcessesByName("masseffect3");
 		if (p.Length == 0)
@@ -53,30 +74,52 @@ class ObjNameDumper
 			ShowExitMessage("Cannot access MassEffect3.exe.");
 			return;
 		}
-		if (args.Length != 0)
+		// no parameters
+		if (args.Length == 0)
 		{
-			
-			if (args[0].StartsWith("0x", StringComparison.Ordinal))
+			LogAllObjectFullNamesToFile();
+			CloseHandle(hGame);
+			return;
+		}
+		// one parameter
+		if (args.Length == 1)
+		{
+			if(args[0].StartsWith("0x", StringComparison.Ordinal))
 			{
 				Console.WriteLine("Reading single object...\n");
 				uint targetObject = Convert.ToUInt32(args[0], 16);
+				Console.ForegroundColor = ConsoleColor.White;
 				Console.WriteLine(String.Format("{0:X8} : {1}", targetObject, GetObjectFullName(targetObject)));
+				Console.ResetColor();
+				CloseHandle(hGame);
+				return;
 			}
+			if(args[0] == "!")
+				appendNameID = true;
 			else
-				LogAllObjectFullNamesToFile(args[0]);
-			
-		}
-		if (args.Length == 0)
+				filter = args[0];
 			LogAllObjectFullNamesToFile();
+			CloseHandle(hGame);
+			return;
+		}
+		// two parameters
+		filter = args[0];
+		if (filter == "!")
+		{
+			appendNameID = true;
+			filter = args[1];
+		}
+		else if (args[1] == "!")
+			appendNameID = true;
 		
+		LogAllObjectFullNamesToFile();
 		CloseHandle(hGame);
 	}
 	
-	static void LogAllObjectFullNamesToFile(string filter = "")
+	static void LogAllObjectFullNamesToFile()
 	{
-		bool useFilter = !String.IsNullOrEmpty(filter);
 		Console.WriteLine ("Reading contents from game's memory...");
-		if (useFilter)
+		if (filter != null)
 		{
 			Console.Write("Using filter: \"");
 			Console.ForegroundColor = ConsoleColor.Cyan;
@@ -85,45 +128,33 @@ class ObjNameDumper
 			Console.WriteLine("\"");
 		}
 		uint GObjectsList = ReadUInt32(GObjects);
-		int GObjectsNum =  ReadInt32(GObjects + 4);
+		GObjectsNum =  ReadInt32(GObjects + 4);
 		Console.WriteLine(String.Format("Current list of GObjects: 0x{0:X8}", GObjectsList));
 		Console.WriteLine("GObjects->Num: " + GObjectsNum);
-		List<string> lstLines = new List<string>();
-		int count = 0;
-		int rcount = 0;
-		int fcount = 0;
-		while (count < GObjectsNum)
+		arrayLines = new string[GObjectsNum];
+		ReadBoundaries rb1, rb2;
+		rb1.firstIndex = 0;
+		rb2.lastIndex = GObjectsNum - 1;
+		rb1.lastIndex = rb2.lastIndex / 2;
+		rb2.firstIndex = rb1.lastIndex + 1;
+		Thread t1 = new Thread(ReadNames);
+		Thread t2 = new Thread(ReadNames);
+		t1.Start(rb1);
+		t2.Start(rb2);
+		while(t1.IsAlive || t2.IsAlive)
 		{
-			uint CurrentGObject = ReadUInt32(GObjectsList + ((uint)count * 4));
-			if (CurrentGObject == 0)
-			{
-				count++;
-				ShowProgressLine(GObjectsNum, count, rcount, fcount, useFilter);
-				continue;
-			}
-			
-			string objFullName = GetObjectFullName(CurrentGObject);
-			
-			if (useFilter && objFullName.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0)
-			{
-				lstLines.Add(String.Format("{0:D8} {0:X8} : {1:X8} : {2}", count, CurrentGObject, objFullName));
-				fcount++;
-			}
-			else if (!useFilter)
-				lstLines.Add(String.Format("{0:D8} {0:X8} : {1:X8} : {2}", count, CurrentGObject, objFullName));
-			
-			rcount++;
-			count++;
-
-			ShowProgressLine(GObjectsNum, count, rcount, fcount, useFilter);
+			ShowProgressLine();
+			Thread.Sleep(10);
 		}
-		// int numberofnullslots = count - rcount;
-		
+		ShowProgressLine(); // show updated last stats after threads have fully stopped
+		Console.ResetColor();
 		Console.Write("\n");
 		Console.WriteLine ("Writing to file...");
+		// remove empty elements from array
+		arrayLines = arrayLines.Where(x => !string.IsNullOrEmpty(x)).ToArray();
 		try
 		{
-			File.WriteAllLines("ME3_GObject_names.txt", lstLines);
+			File.WriteAllLines("ME3_GObject_names.txt", arrayLines);
 			ShowExitMessage("Done => ME3_GObject_names.txt");
 		}
 		catch (Exception ex)
@@ -132,16 +163,15 @@ class ObjNameDumper
 		}
 	}
 	
-	static void ShowProgressLine(int num, int count, int rcount, int fcount, bool useFilter)
+	static void ShowProgressLine()
 	{
 		Console.ForegroundColor = ConsoleColor.White;
-		Console.Write(String.Format("\r{0}{1}", ((float)count/num).ToString("0%").PadRight(10), rcount.ToString().PadRight(10)));
-		if (useFilter)
+		Console.Write(String.Format("\r{0}{1}", ((float)count/GObjectsNum).ToString("0%").PadRight(10), rcount.ToString().PadRight(10)));
+		if (filter != null)
 		{
 			Console.ForegroundColor = ConsoleColor.Cyan;
 			Console.Write(fcount);
 		}
-		Console.ResetColor();
 	}
 	
 	static void ShowExitMessage(string message)
@@ -192,7 +222,7 @@ class ObjNameDumper
 	
 	static string GetObjectFullName(uint CurrentObject)
 	{
-		string fullname = "(null)";
+		string fullname = null;
 		uint objOuter = GetObjectOuter(CurrentObject);
 		uint objClass = GetObjectClass(CurrentObject);
 		if(objOuter != 0 && objClass != 0)
@@ -209,7 +239,16 @@ class ObjNameDumper
 			fullname = GetObjectName(objClass) + " ";
 			fullname += GetObjectName(CurrentObject) + " (no Outer)";
 		}
-		return fullname;
+		if (fullname != null)
+		{
+			if(appendNameID)
+			{
+				uint count30 = ReadUInt32(CurrentObject + 0x30);
+				return (count30 == 0) ? fullname: fullname + "_" + (count30 - 1);
+			}
+			return fullname;
+		}
+		return "(null)";
 	}
 	
 	static uint GetObjectOuter(uint CurrentObject)
@@ -220,6 +259,65 @@ class ObjNameDumper
 	static uint GetObjectClass(uint CurrentObject)
 	{
 		return ReadUInt32(CurrentObject + 0x34);
+	}
+	
+	struct ReadBoundaries
+	{
+		public int firstIndex;
+		public int lastIndex;
+	}
+	
+	static void ReadNames(object obj)
+	{
+		ReadBoundaries sb = (ReadBoundaries)obj;
+		uint GObjectBase = ReadUInt32(GObjects);
+		uint CurrentObject;
+		string CurrentFullName;
+		for (int i = sb.firstIndex; i <= sb.lastIndex; i++)
+		{
+			IncreaseCount();
+			CurrentObject = ReadUInt32(GObjectBase + (uint)i * 4);
+			if (CurrentObject == 0)
+			{
+				continue;
+			}
+			
+			CurrentFullName = GetObjectFullName(CurrentObject);
+			IncreaseCountR();
+			
+			if(filter != null && CurrentFullName.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0)
+			{
+				arrayLines[i] = String.Format("{0:D8} {0:X8} : {1:X8} : {2}", i, CurrentObject, CurrentFullName);
+				IncreaseCountF();
+			}
+			if (filter == null)
+				arrayLines[i] = String.Format("{0:D8} {0:X8} : {1:X8} : {2}", i, CurrentObject, CurrentFullName);
+			
+		}
+	}
+	
+	static void IncreaseCount()
+	{
+		lock(thisLock)
+		{
+			count++;
+		}
+	}
+	
+	static void IncreaseCountR()
+	{
+		lock(thisLockR)
+		{
+			rcount++;
+		}
+	}
+	
+	static void IncreaseCountF()
+	{
+		lock(thisLockF)
+		{
+			fcount++;
+		}
 	}
 
 }
