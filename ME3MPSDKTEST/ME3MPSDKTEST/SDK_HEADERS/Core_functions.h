@@ -106,22 +106,27 @@ template< class T > T* UObject::FindObject ( char* ObjectFullName )
 	while ( ! UObject::GObjObjects() ) 
 		Sleep ( 100 ); 
 
-	for ( int i = 0; i < UObject::GObjObjects()->Count; ++i ) 
-	{ 
-		UObject* Object = UObject::GObjObjects()->Data[ i ]; 
+	__try {
+		for (int i = 0; i < UObject::GObjObjects()->Count; ++i)
+		{
+			UObject* Object = UObject::GObjObjects()->Data[i];
 
-		// skip no T class objects 
-		if 
-		( 
-				! Object 
-			||	! Object->IsA ( T::StaticClass() ) 
-		) 
-			continue; 
+			// skip no T class objects 
+			if
+				(
+					!Object
+					|| !Object->IsA(T::StaticClass())
+					)
+				continue;
 
-		// check 
-		if ( ! _stricmp ( Object->GetFullName(), ObjectFullName ) ) 
-			return (T*) Object; 
-	} 
+			// check 
+			if (!_stricmp(Object->GetFullName(), ObjectFullName))
+				return (T*)Object;
+		}
+	}
+	__except (EXCEPTION_ACCESS_VIOLATION) {
+		return NULL;
+	}
 
 	return NULL; 
 } 
