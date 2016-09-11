@@ -26,7 +26,7 @@ bool checkGameHasFocus()
 
 DWORD WINAPI RichPresenceUpdater(LPVOID lpParam)
 {
-	Sleep(10000);
+	Sleep(5000);
 	do
 	{
 		Sleep(10000);
@@ -50,7 +50,7 @@ DWORD WINAPI RichPresenceUpdater(LPVOID lpParam)
 			wsprintfW(presencetext, L"MP Match: %ls/%ls/%ls", textmap[grimp->MapSetting], textenemy[grimp->EnemySetting], textdif[grimp->DifficultySetting]);
 			origincomp->SetRichPresence(presencetext, L"");
 		}
-		else
+		else if (origincomp) 
 		{
 			origincomp->SetRichPresence(L"SP", L"");
 		}
