@@ -6,4 +6,8 @@
 
 #include <windows.h>
 #include <stdio.h>
+#include <iostream>
+#include <fstream>
+#include <string>
 #include "SdkHeaders.h"
+using namespace std;
