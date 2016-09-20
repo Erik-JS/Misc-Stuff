@@ -44,8 +44,7 @@ DWORD WINAPI RichPresenceUpdater(LPVOID lpParam)
 			if (*(int*)lobbyPointer != 0) {
 				//outfile << "MP and lobby pointer\n";
 				//outfile.flush();
-				int numPlayers = grimp_lobby->GetNumPlayers();
-				wsprintfW(presencetext, L"MP Lobby: %ls/%ls/%ls [%d/4 players]", textmap[grimp_lobby->MapSetting], textenemy[grimp_lobby->EnemySetting], textdif[grimp_lobby->DifficultySetting], numPlayers);
+				wsprintfW(presencetext, L"MP Lobby: %ls/%ls/%ls", textmap[grimp_lobby->MapSetting], textenemy[grimp_lobby->EnemySetting], textdif[grimp_lobby->DifficultySetting]);
 			}
 			else {
 				wsprintfW(presencetext, L"MP Main Menu");
